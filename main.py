@@ -1,3 +1,4 @@
+import binascii
 import cv2
 import numpy as np
 import zlib
@@ -7,14 +8,15 @@ import os
 from PIL import Image
 
 def print_banner():
+    os.system('cls' if os.name == 'nt' else 'clear')
     print("""
-███████╗████████╗███████╗ ██████╗ ██████╗ ███████╗███████╗██████╗ 
-██╔════╝╚══██╔══╝██╔════╝██╔════╝ ██╔══██╗██╔════╝██╔════╝██╔══██╗
-███████╗   ██║   █████╗  ██║  ███╗██║  ██║█████╗  █████╗  ██████╔╝
-╚════██║   ██║   ██╔══╝  ██║   ██║██║  ██║██╔══╝  ██╔══╝  ██╔═══╝ 
-███████║   ██║   ███████╗╚██████╔╝██████╔╝███████╗███████╗██║     
-╚══════╝   ╚═╝   ╚══════╝ ╚═════╝ ╚═════╝ ╚══════╝╚══════╝╚═╝     
-                                                                  
+    ███████╗████████╗███████╗ ██████╗ ██████╗ ███████╗███████╗██████╗ 
+    ██╔════╝╚══██╔══╝██╔════╝██╔════╝ ██╔══██╗██╔════╝██╔════╝██╔══██╗
+    ███████╗   ██║   █████╗  ██║  ███╗██║  ██║█████╗  █████╗  ██████╔╝
+    ╚════██║   ██║   ██╔══╝  ██║   ██║██║  ██║██╔══╝  ██╔══╝  ██╔═══╝ 
+    ███████║   ██║   ███████╗╚██████╔╝██████╔╝███████╗███████╗██║     
+    ╚══════╝   ╚═╝   ╚══════╝ ╚═════╝ ╚═════╝ ╚══════╝╚══════╝╚═╝     
+    
     stegDeep - Advanced Steganography Tool
     """)
 
@@ -28,7 +30,7 @@ def hide_text(image_path, message):
     
     flat_img = img.flatten()
     for i in range(len(message_bits)):
-        flat_img[i] = (flat_img[i] & ~1) | int(message_bits[i])
+        flat_img[i] = (flat_img[i] & 254) | int(message_bits[i])
     
     img = flat_img.reshape(img.shape)
     output_path = os.path.splitext(image_path)[0] + '_embedded.png'
@@ -37,6 +39,10 @@ def hide_text(image_path, message):
 
 def extract_text(image_path):
     img = cv2.imread(image_path)
+    if img is None:
+        print(f"Error: Unable to read the image file '{image_path}'. Check the file path and format.")
+        return None
+    
     flat_img = img.flatten()
     message_bits = ''.join(str(flat_img[i] & 1) for i in range(flat_img.size))
     
@@ -44,8 +50,27 @@ def extract_text(image_path):
     try:
         message = zlib.decompress(byte_array).decode('utf-8')
         print("Extracted Message:", message)
+        return message
     except:
         print("No valid hidden message found!")
+        return None
+
+def extract_file(image_path, output_path):
+    hidden_data = extract_text(image_path)
+    if hidden_data:
+        try:
+            hidden_data = hidden_data.strip()  # Remove unwanted spaces or newlines
+            if len(hidden_data) % 4:
+                hidden_data += '=' * (4 - len(hidden_data) % 4)  # Properly pad base64 data
+            decoded_data = base64.b64decode(hidden_data)
+            decompressed_data = zlib.decompress(decoded_data)
+            with open(output_path, 'wb') as f:
+                f.write(decompressed_data)
+            print(f"Extracted file saved as {output_path}")
+        except (binascii.Error, zlib.error) as e:
+            print(f"Error during extraction: {e}")
+    else:
+        print("Extraction failed. No valid data found in the image.")
 
 def hide_file(image_path, file_path):
     with open(file_path, 'rb') as f:
@@ -54,12 +79,12 @@ def hide_file(image_path, file_path):
     hide_text(image_path, base64.b64encode(compressed_data).decode('utf-8'))
     print(f"File {file_path} hidden inside {image_path}")
 
-def extract_file(image_path, output_path):
-    hidden_data = extract_text(image_path)
-    if hidden_data:
-        with open(output_path, 'wb') as f:
-            f.write(zlib.decompress(base64.b64decode(hidden_data)))
-        print(f"Extracted file saved as {output_path}")
+# def extract_file(image_path, output_path):
+#     hidden_data = extract_text(image_path)
+#     if hidden_data:
+#         with open(output_path, 'wb') as f:
+#             f.write(zlib.decompress(base64.b64decode(hidden_data)))
+#         print(f"Extracted file saved as {output_path}")
 
 def detect_steganography(image_path):
     img = cv2.imread(image_path)
@@ -80,16 +105,16 @@ def parse_arguments():
     
     example_usage = """
     Examples:
-    Hide a text message:
-        python stegno.py --hide --source image.png --text "Secret Message"
-    Extract a text message:
-        python stegno.py --extract --source image_embedded.png
-    Hide a file:
-        python stegno.py --hide-file --source image.png --file secret.txt
-    Extract a file:
-        python stegno.py --extract-file --source image_embedded.png --file output.txt
-    Detect steganography:
-        python stegno.py --detect --source image_embedded.png
+    Hide a text message:\n
+        \tpython main.py --hide --source image.png --text "Secret Message"
+    Extract a text message:\n
+        \tpython main.py --extract --source image_embedded.png
+    Hide a file:\n
+        \tpython main.py --hide-file --source image.png --file secret.txt
+    Extract a file:\n
+        \tpython main.py --extract-file --source image_embedded.png --file output.txt
+    Detect steganography:\n
+        \tpython main.py --detect --source image_embedded.png
     """
     parser.epilog = example_usage
     return parser.parse_args()
